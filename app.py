@@ -9,8 +9,15 @@ from google import genai
 # Load settings from the .env file
 load_dotenv()
 
-API_KEY = os.getenv("GEMINI_API_KEY")
-MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+API_KEY = st.secrets.get(
+    "GEMINI_API_KEY",
+    os.getenv("GEMINI_API_KEY", "")
+)
+
+MODEL = st.secrets.get(
+    "GEMINI_MODEL",
+    os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+)
 
 # Configure the webpage
 
