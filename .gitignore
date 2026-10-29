@@ -3,3 +3,4 @@
 __pycache__/
 *.pyc
 business_enquiries.db
+.streamlit/secrets.toml

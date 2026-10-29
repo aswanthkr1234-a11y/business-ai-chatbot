@@ -3,21 +3,26 @@ import os
 import pandas as pd
 import streamlit as st  # pyright: ignore[reportMissingImports]
 import sqlite3
+import psycopg  # pyright: ignore[reportMissingImports]
 from dotenv import load_dotenv  # pyright: ignore[reportMissingImports]
 from google import genai
 
 # Load settings from the .env file
 load_dotenv()
 
-API_KEY = st.secrets.get(
-    "GEMINI_API_KEY",
-    os.getenv("GEMINI_API_KEY", "")
-)
+try:
+    API_KEY = st.secrets["GEMINI_API_KEY"]
+except (KeyError, FileNotFoundError):
+    API_KEY = os.getenv("GEMINI_API_KEY", "")
+except Exception:
+    API_KEY = os.getenv("GEMINI_API_KEY", "")
 
-MODEL = st.secrets.get(
-    "GEMINI_MODEL",
-    os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
-)
+try:
+    MODEL = st.secrets["GEMINI_MODEL"]
+except (KeyError, FileNotFoundError):
+    MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+except Exception:
+    MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
 # Configure the webpage
 
@@ -226,6 +231,17 @@ if st.session_state.messages:
 st.divider()
 st.subheader("📩 Contact Us")
 
+# Configure the database connection before the form uses it.
+try:
+    DATABASE_URL = st.secrets["DATABASE_URL"]
+except Exception:
+    DATABASE_URL = os.getenv("DATABASE_URL", "")
+def get_db_connection():
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL is not configured.")
+
+    return psycopg.connect(DATABASE_URL)
+
 with st.form("customer_enquiry_form"):
     customer_name = st.text_input("Name")
     customer_email = st.text_input("Email")
@@ -241,54 +257,24 @@ if submitted:
 
         else:
             try:
-                conn = sqlite3.connect("business_enquiries.db")
-                cursor = conn.cursor()
-
-                cursor.execute(
-                    """
-                    INSERT INTO enquiries (name, email, enquiry)
-                    VALUES (?, ?, ?)
-                    """,
-                    (
-                        customer_name.strip(),
-                        customer_email.strip(),
-                        customer_enquiry.strip()
+                with get_db_connection() as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO public.enquiries (name, email, enquiry)
+                        VALUES (%s, %s, %s)
+                        """,
+                        (
+                            customer_name.strip(),
+                            customer_email.strip(),
+                            customer_enquiry.strip()
+                        )
                     )
-                )
-
-                conn.commit()
-                conn.close()
 
                 st.success("Your enquiry has been saved successfully!")
 
-            except sqlite3.Error as error:
+            except Exception as error:
                 st.error("Unable to save your enquiry.")
                 st.error(str(error))
-
-
-
-
-# Create the database and enquiries table
-def init_database():
-    conn = sqlite3.connect("business_enquiries.db")
-    cursor = conn.cursor()
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS enquiries (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            enquiry TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
-    conn.commit()
-    conn.close()
-
-
-init_database()
-
 
 
 # Admin Dashboard
@@ -307,18 +293,19 @@ if st.button("View Enquiries"):
 
     else:
         try:
-            conn = sqlite3.connect("business_enquiries.db")
+            with get_db_connection() as conn:
+                cursor = conn.execute(
+                    """
+                    SELECT id, name, email, enquiry, created_at
+                    FROM public.enquiries
+                    ORDER BY created_at DESC
+                    """
+                )
 
-            enquiries = pd.read_sql_query(
-                """
-                SELECT id, name, email, enquiry, created_at
-                FROM enquiries
-                ORDER BY id DESC
-                """,
-                conn
-            )
+                rows = cursor.fetchall()
+                columns = [column.name for column in cursor.description]
 
-            conn.close()
+            enquiries = pd.DataFrame(rows, columns=columns)
 
             if enquiries.empty:
                 st.info("No customer enquiries found.")
