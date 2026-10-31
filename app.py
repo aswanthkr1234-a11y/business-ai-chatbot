@@ -1,5 +1,6 @@
 
 import os
+import time
 import pandas as pd
 import streamlit as st  # pyright: ignore[reportMissingImports]
 import sqlite3
@@ -190,28 +191,26 @@ Write the next assistant response.
     with st.chat_message("assistant"):
         try:
             with st.spinner("Thinking..."):
+                start_time = time.time()
                 response = client.models.generate_content(
                     model=MODEL,
                     contents=prompt
                 )
-
+                end_time = time.time()
                 answer = response.text
 
                 if not answer:
-                    answer = "Sorry, I couldn't generate an answer."
+                    answer = "Sorry , I couldn't generate an answer."
 
-            st.markdown(answer)
-
+                st.markdown(answer)
+                
+                st.caption(
+                    f"AI response time: {end_time - start_time:.2f} seconds"
+                )   
         except Exception as error:
-            answer = (
-                "Sorry, something went wrong. "
-                "Check your API configuration and try again."
-            )
+            answer = "Sorry, I couldn't generate a response right now. Please try again."
             st.error(answer)
-
-            # Show technical details for debugging
-            with st.expander("Technical error details"):
-                st.code(str(error))
+            st.code(str(error))
 
     # Save the answer in chat history
     st.session_state.messages.append({
